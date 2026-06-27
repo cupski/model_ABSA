@@ -1,4 +1,7 @@
 [core]
-    remote = gdrive
-['remote "gdrive"']
-    url = gdrive://1tjscxZYUmqgCQDSaEQdv_rvFnnIMpk4O
+    remote = storage
+['remote "storage"']
+    url = s3://absa-dvc-storage
+    endpointurl = http://localhost:9000
+    access_key_id = admin
+    secret_access_key = password123
