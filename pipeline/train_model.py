@@ -5,10 +5,15 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.optim import AdamW
 from transformers import AutoTokenizer, get_linear_schedule_with_warmup
+import mlflow
 
 from train import ABSADataset, ABSACollator, ABSAModel, compute_loss
 from pipeline.evaluate_model import _eval_loop
 from preprocessing_functions import FINAL_ASPECTS, NUM_CLASSES
+
+
+def _asp_key(asp: str) -> str:
+    return asp.replace(' ', '_').replace('&', 'and').replace('/', '_').lower()
 
 
 def train_model(config: dict, data: dict) -> dict:
@@ -82,13 +87,21 @@ def _train_indobert(config: dict, data: dict) -> dict:
     scheduler    = get_linear_schedule_with_warmup(optimizer, warmup_steps, total_steps)
 
     best_f1, patience_cnt = 0.0, 0
-    history = {'train_loss': [], 'val_detect_f1': [], 'val_sentiment_f1': []}
+    history = {
+        'train_loss'             : [],
+        'val_detect_f1'          : [],
+        'val_sentiment_f1'       : [],
+        'val_sentiment_f1_per_asp': [],  # list of dict {asp: f1} per epoch
+        'val_detect_f1_per_asp'  : [],
+    }
 
     print(f"\n  {'='*56}")
     print(f"  TRAINING IndoBERT — {len(df_train)} train | {len(df_val)} val")
     print(f"  Epochs: {params['num_epochs']} | Batch: {params['batch_size']} | "
           f"LR: {params['learning_rate']:.2e}")
     print(f"  {'='*56}\n")
+
+    global_step = 0  # counter step global lintas epoch untuk sumbu x MLflow
 
     for epoch in range(params['num_epochs']):
         model.train()
@@ -109,9 +122,14 @@ def _train_indobert(config: dict, data: dict) -> dict:
 
             ep_loss += loss.item()
             n_batch += 1
+            global_step += 1
+
+            # Log loss per step setiap 50 step — memberi kurva loss granular
             if (step + 1) % 50 == 0:
+                step_loss = ep_loss / n_batch
                 print(f"    Ep{epoch+1} step{step+1}/{len(train_loader)} "
-                      f"loss={ep_loss/n_batch:.4f}")
+                      f"loss={step_loss:.4f}")
+                mlflow.log_metric('train/loss_step', step_loss, step=global_step)
 
         avg_loss = ep_loss / n_batch
         det_f1, sent_f1, avg_det, avg_sent, _, _ = _eval_loop(model, val_loader, device)
@@ -119,6 +137,19 @@ def _train_indobert(config: dict, data: dict) -> dict:
         history['train_loss'].append(avg_loss)
         history['val_detect_f1'].append(avg_det)
         history['val_sentiment_f1'].append(avg_sent)
+        history['val_sentiment_f1_per_asp'].append(dict(sent_f1))
+        history['val_detect_f1_per_asp'].append(dict(det_f1))
+
+        # ── Log metrik per epoch ke MLflow ────────────────────────────
+        # step=epoch+1 sehingga sumbu x di MLflow UI dimulai dari 1
+        mlflow.log_metric('train/loss',         avg_loss, step=epoch + 1)
+        mlflow.log_metric('val/detect_f1',      avg_det,  step=epoch + 1)
+        mlflow.log_metric('val/sentiment_f1',   avg_sent, step=epoch + 1)
+
+        for asp in FINAL_ASPECTS:
+            k = _asp_key(asp)
+            mlflow.log_metric(f'val/sentiment_f1_{k}', sent_f1[asp], step=epoch + 1)
+            mlflow.log_metric(f'val/detect_f1_{k}',    det_f1[asp],  step=epoch + 1)
 
         print(f"  Epoch {epoch+1}/{params['num_epochs']} | "
               f"Loss: {avg_loss:.4f} | Det: {avg_det:.4f} | "

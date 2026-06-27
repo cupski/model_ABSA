@@ -9,8 +9,7 @@ experiment:
 # Jalankan: dvc add ABSA_dataset_final_CLEAN.csv && dvc push
 # lalu perbarui dvc_version di bawah sesuai tag DVC yang digunakan.
 data:
-  path: "ABSA_dataset_final_CLEAN.csv"
-  dvc_version: "v1.0"
+  path: "data/raw/ABSA_dataset_final_CLEAN.csv"
   text_column: "Komentar"
   split:
     train_ratio: 0.70
@@ -53,3 +52,6 @@ model:
     weight_decay: 0.039008177788135416
     max_grad_norm: 1.0
     patience: 5
+
+mlflow:
+  tracking_uri: http://localhost:5000

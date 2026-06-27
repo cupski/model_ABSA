@@ -1,13 +1,3 @@
-"""
-Skrip orkestrasi pipeline eksperimen ABSA.
-
-Penggunaan:
-    python run_experiment.py configs/experiment_indobert_baseline.yaml
-
-Setiap variasi eksperimen dijalankan dengan mengganti file konfigurasi,
-bukan mengubah skrip ini.
-"""
-
 import os
 import json
 import argparse
@@ -80,6 +70,7 @@ def run_experiment(config_path: str) -> dict:
     dict — metrik evaluasi test set
     """
     config = load_config(config_path)
+    mlflow.set_tracking_uri(config["mlflow"]["tracking_uri"])
 
     mlflow.set_experiment(config['experiment']['name'])
 
@@ -94,13 +85,13 @@ def run_experiment(config_path: str) -> dict:
 
         # ── Catat metadata versi ───────────────────────────────────
         git_commit = get_git_commit()
-        mlflow.set_tag('git_commit',       git_commit)
-        mlflow.set_tag('dvc_data_version', config['data']['dvc_version'])
+        mlflow.set_tag('git_commit (versi kode dan data)',       git_commit)
+        mlflow.log_artifact("data/raw/ABSA_dataset_final_CLEAN.csv.dvc", artifact_path="dataset")
         mlflow.set_tag('model_name',       config['representation']['model_name'])
         mlflow.set_tag('model_revision',   config['representation'].get('model_revision', 'main'))
         mlflow.set_tag('description',      config['experiment'].get('description', ''))
-        print(f"\nVersi kode  : {git_commit[:12]}")
-        print(f"Versi data  : {config['data']['dvc_version']}")
+        mlflow.log_artifact("requirements.txt")
+        print(f"\nVersi kode dan data : {git_commit[:12]}")
         print(f"Model       : {config['representation']['model_name']} "
               f"@ {config['representation'].get('model_revision', 'main')}")
 
