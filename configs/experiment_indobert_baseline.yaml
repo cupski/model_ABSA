@@ -1,0 +1,55 @@
+experiment:
+  name: "exp01_indobert_baseline"
+  description: >
+    IndoBERT fine-tuning ABSA Kompas.id — baseline.
+    Hyperparameter berasal dari hasil tuning Optuna.
+
+# ── POINTER DATASET ───────────────────────────────────────────────────────────
+# dvc_version harus diperbarui setiap kali dataset berubah.
+# Jalankan: dvc add ABSA_dataset_final_CLEAN.csv && dvc push
+# lalu perbarui dvc_version di bawah sesuai tag DVC yang digunakan.
+data:
+  path: "ABSA_dataset_final_CLEAN.csv"
+  dvc_version: "v1.0"
+  text_column: "Komentar"
+  split:
+    train_ratio: 0.70
+    val_ratio: 0.15
+    random_state: 42
+
+# ── KONFIGURASI PRAPEMROSESAN ─────────────────────────────────────────────────
+# Setiap flag dapat diaktifkan (true) atau dinonaktifkan (false)
+# tanpa mengubah kode prapemrosesan.
+preprocessing:
+  remove_emoji: true
+  lowercase: true
+  remove_url_mention: true
+  compress_repeated_chars: true
+  remove_special_chars: true
+  normalize_slang: true
+  remove_stopwords: false  # false untuk IndoBERT (model sudah kontekstual)
+
+# ── KONFIGURASI REPRESENTASI TEKS ────────────────────────────────────────────
+# model_revision harus dikunci ke commit hash spesifik setelah eksperimen
+# pertama dijalankan, agar pembaruan model tidak mengubah representasi.
+# Contoh: model_revision: "abc1234def5678"
+representation:
+  type: "indobert"
+  model_name: "indobenchmark/indobert-base-p1"
+  model_revision: "main"
+  max_length: 128
+
+# ── KONFIGURASI MODEL ─────────────────────────────────────────────────────────
+model:
+  type: "indobert_multitask"
+  use_class_weights: true
+  save_dir: "model_output"
+  params:
+    dropout_rate: 0.17366466880936898
+    batch_size: 8
+    learning_rate: 4.801650729207848e-05
+    num_epochs: 25
+    warmup_ratio: 0.05366045312634687
+    weight_decay: 0.039008177788135416
+    max_grad_norm: 1.0
+    patience: 5

@@ -1,0 +1,69 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyd
+*.pyo
+*.pyw
+
+# ── Virtual Environment ───────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Dataset & Data Artefak (dikelola DVC) ────────────────────────────────────
+# File DVC pointer (.dvc) TETAP di-track git.
+# Data mentah diabaikan via data/raw/.gitignore (dibuat DVC secara otomatis).
+# File split hasil prepare_data dan data_preperation diabaikan di sini:
+sample_data/
+df_train.csv
+df_val.csv
+df_test.csv
+data_stats.json
+class_weights.json
+
+# ── Model Output ──────────────────────────────────────────────────────────────
+model_output*/
+*.pt
+*.pkl
+*.bin
+*.onnx
+*.safetensors
+
+# ── MLflow ────────────────────────────────────────────────────────────────────
+mlruns/
+mlartifacts/
+
+# ── DVC (cache & temp, config resmi ada di .dvc/.gitignore) ──────────────────
+.dvc/tmp/
+.dvc/cache/
+
+# ── Jupyter ───────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── Log & Debug ───────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Environment Variables ────────────────────────────────────────────────────
+.env
+.env.*
+*.env
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.idea/
+*.iml
+.vscode/
+
+# ── Build & Distribusi ────────────────────────────────────────────────────────
+dist/
+build/
+*.egg-info/
+*.egg
+.eggs/
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+Desktop.ini
