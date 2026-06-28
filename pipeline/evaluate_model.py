@@ -1,6 +1,8 @@
+import os
 import numpy as np
 import torch
-from sklearn.metrics import f1_score, classification_report
+import matplotlib.pyplot as plt
+from sklearn.metrics import f1_score, classification_report, confusion_matrix
 
 from preprocessing_functions import FINAL_ASPECTS, NUM_CLASSES, LABEL_NAMES
 
@@ -135,6 +137,60 @@ def _evaluate_indobert(config: dict, trained: dict, data: dict) -> dict:
         print(classification_report(
             y_true, y_pred, target_names=LABEL_NAMES[asp], zero_division=0,
         ))
+
+    # ── Simpan classification report ke file ──────────────────────────
+    save_dir = trained['save_dir']
+    report_path = os.path.join(save_dir, 'classification_report.txt')
+    with open(report_path, 'w', encoding='utf-8') as fout:
+        fout.write("Classification Report per Aspek (Test Set)\n")
+        fout.write("=" * 60 + "\n\n")
+        for asp in FINAL_ASPECTS:
+            y_true  = np.array(all_labels[asp])
+            y_pred  = np.array(all_preds[asp])
+            n_aktif = (y_true != NONE_IDX[asp]).sum()
+            fout.write(f"{asp}  (n_total={len(y_true)}, n_aktif={n_aktif})\n")
+            fout.write(classification_report(
+                y_true, y_pred, target_names=LABEL_NAMES[asp], zero_division=0,
+            ))
+            fout.write("\n")
+
+    # ── Confusion matrix per aspek ─────────────────────────────────────
+    n_cols = 3
+    n_rows = (len(FINAL_ASPECTS) + n_cols - 1) // n_cols
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 5 * n_rows))
+    axes = axes.flatten()
+
+    for i, asp in enumerate(FINAL_ASPECTS):
+        y_true = np.array(all_labels[asp])
+        y_pred = np.array(all_preds[asp])
+        n_cls  = len(LABEL_NAMES[asp])
+        cm     = confusion_matrix(y_true, y_pred, labels=list(range(n_cls)))
+
+        ax = axes[i]
+        im = ax.imshow(cm, interpolation='nearest', cmap='Blues')
+        ax.set_title(asp, fontsize=9, pad=4)
+        ticks = list(range(n_cls))
+        ax.set_xticks(ticks)
+        ax.set_xticklabels(LABEL_NAMES[asp], rotation=45, ha='right', fontsize=8)
+        ax.set_yticks(ticks)
+        ax.set_yticklabels(LABEL_NAMES[asp], fontsize=8)
+        ax.set_xlabel('Prediksi', fontsize=8)
+        ax.set_ylabel('Aktual',   fontsize=8)
+        thresh = cm.max() / 2.
+        for r in range(cm.shape[0]):
+            for c in range(cm.shape[1]):
+                ax.text(c, r, str(cm[r, c]), ha='center', va='center', fontsize=9,
+                        color='white' if cm[r, c] > thresh else 'black')
+        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+
+    for j in range(i + 1, len(axes)):
+        axes[j].set_visible(False)
+
+    plt.suptitle('Confusion Matrix per Aspek — Test Set', fontsize=11)
+    plt.tight_layout()
+    cm_path = os.path.join(save_dir, 'confusion_matrix.png')
+    plt.savefig(cm_path, dpi=150, bbox_inches='tight')
+    plt.close(fig)
 
     # ── Metrik flat untuk MLflow ────────────────────────────────────────
     metrics = {

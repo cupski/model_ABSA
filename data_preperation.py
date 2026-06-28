@@ -204,17 +204,19 @@ def test_pipeline_on_samples():
 # ── ENTRY POINT ───────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(
-        description='Data preparation untuk training ABSA Kompas.id')
-    parser.add_argument('--data_path',  type=str, default='ABSA_dataset_final_CLEAN.csv',
-                        help='Path ke file CSV dataset berlabel')
-    parser.add_argument('--output_dir', type=str, default='.',
-                        help='Direktori output untuk file hasil preparation')
-    parser.add_argument('--test_only',  action='store_true',
-                        help='Hanya jalankan pengujian sampel, tanpa memproses dataset penuh')
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser(
+    #     description='Data preparation untuk training ABSA Kompas.id')
+    # parser.add_argument('--data_path',  type=str, default='ABSA_dataset_final_CLEAN.csv',
+    #                     help='Path ke file CSV dataset berlabel')
+    # parser.add_argument('--output_dir', type=str, default='.',
+    #                     help='Direktori output untuk file hasil preparation')
+    # parser.add_argument('--test_only',  action='store_true',
+    #                     help='Hanya jalankan pengujian sampel, tanpa memproses dataset penuh')
+    # args = parser.parse_args()
 
-    test_pipeline_on_samples()
+    # test_pipeline_on_samples()
 
-    if not args.test_only:
-        run_pipeline(args.data_path, args.output_dir)
+    # if not args.test_only:
+    #     run_pipeline(args.data_path, args.output_dir)
+    
+    run_pipeline("data/raw/ABSA_dataset_final_CLEAN.csv", ".")

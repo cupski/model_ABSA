@@ -30,6 +30,7 @@ def get_git_commit() -> str:
         return 'unknown'
 
 
+
 def flatten_config(cfg: dict, prefix: str = '') -> dict:
     """
     Ratakan dict konfigurasi bersarang menjadi dict satu level
@@ -70,6 +71,8 @@ def run_experiment(config_path: str) -> dict:
     dict — metrik evaluasi test set
     """
     config = load_config(config_path)
+    
+    os.environ["MLFLOW_ENABLE_SYSTEM_METRICS_LOGGING"] = "true"
     tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", config["mlflow"]["tracking_uri"])
     mlflow.set_tracking_uri(tracking_uri)
 
@@ -86,13 +89,15 @@ def run_experiment(config_path: str) -> dict:
 
         # ── Catat metadata versi ───────────────────────────────────
         git_commit = get_git_commit()
-        mlflow.set_tag('git_commit - versi kode dan data',       git_commit)
-        mlflow.log_artifact("data/raw/ABSA_dataset_final_CLEAN.csv.dvc", artifact_path="dataset")
-        mlflow.set_tag('model_name',       config['representation']['model_name'])
-        mlflow.set_tag('model_revision',   config['representation'].get('model_revision', 'main'))
-        mlflow.set_tag('description',      config['experiment'].get('description', ''))
+
+        mlflow.set_tag('git_commit',     git_commit)
+        mlflow.set_tag('model_name',     config['representation']['model_name'])
+        mlflow.set_tag('model_revision', config['representation'].get('model_revision', 'main'))
+        mlflow.set_tag('description',    config['experiment'].get('description', ''))
+
         mlflow.log_artifact("requirements.txt")
-        print(f"\nVersi kode dan data : {git_commit[:12]}")
+
+        print(f"\nVersi kode  : {git_commit[:12]}")
         print(f"Model       : {config['representation']['model_name']} "
               f"@ {config['representation'].get('model_revision', 'main')}")
 
@@ -131,7 +136,8 @@ def run_experiment(config_path: str) -> dict:
         # ── 3. Pelatihan model ─────────────────────────────────────
         print("\n[3/4] Pelatihan model...")
         trained = train_model(config, data)
-        mlflow.log_metric('val_best_sentiment_f1', trained['best_val_f1'])
+        mlflow.log_metric('best_val_sentiment_f1', trained['best_val_f1'])
+        mlflow.log_metric('best_val_detection_f1', trained['best_val_det_f1'])
 
         # ── 4. Evaluasi model ──────────────────────────────────────
         print("\n[4/4] Evaluasi model pada test set...")
@@ -139,9 +145,14 @@ def run_experiment(config_path: str) -> dict:
         mlflow.log_metrics(metrics)
 
         # ── Simpan artefak ke MLflow ────────────────────────────────
-        # Checkpoint model, history, class weights
+        # Hanya file kecil dari save_dir (skip checkpoint model yang besar)
+        # Checkpoint disimpan terpisah via DVC setelah training selesai
+        _LARGE_EXTS = {'.bin', '.safetensors', '.pt', '.pth'}
         if os.path.isdir(save_dir):
-            mlflow.log_artifacts(save_dir, artifact_path='model_artifacts')
+            for fname in os.listdir(save_dir):
+                fpath = os.path.join(save_dir, fname)
+                if os.path.isfile(fpath) and os.path.splitext(fname)[1].lower() not in _LARGE_EXTS:
+                    mlflow.log_artifact(fpath, artifact_path='model_artifacts')
 
         # File konfigurasi yang digunakan eksperimen ini
         mlflow.log_artifact(config_path, artifact_path='config')
@@ -152,7 +163,11 @@ def run_experiment(config_path: str) -> dict:
         print(f"  Test Mean Sentiment F1 : {metrics.get('test_mean_sentiment_f1', 0):.4f}  <- metrik utama")
         print(f"  Test Mean Detection F1 : {metrics.get('test_mean_detect_f1', 0):.4f}")
         print(f"  MLflow Run ID          : {run_id}")
-        print(f"  Jalankan: mlflow ui    untuk melihat hasil eksperimen")
+        print(f"\n  [!] Checkpoint model belum di-push ke MinIO.")
+        print(f"      Setelah git pull di laptop, jalankan:")
+        print(f"        dvc add {save_dir}/")
+        print(f"        dvc push")
+        print(f"        git add {save_dir}.dvc && git commit && git push")
         print(f"{'='*60}\n")
 
     return metrics
