@@ -70,7 +70,8 @@ def run_experiment(config_path: str) -> dict:
     dict — metrik evaluasi test set
     """
     config = load_config(config_path)
-    mlflow.set_tracking_uri(config["mlflow"]["tracking_uri"])
+    tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", config["mlflow"]["tracking_uri"])
+    mlflow.set_tracking_uri(tracking_uri)
 
     mlflow.set_experiment(config['experiment']['name'])
 
