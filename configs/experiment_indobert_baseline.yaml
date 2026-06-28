@@ -1,5 +1,5 @@
 experiment:
-  name: "exp01_indobert_baseline"
+  name: "exp01_indobert_optuna_imbalanced"
   description: >
     IndoBERT fine-tuning ABSA Kompas.id — baseline.
     Hyperparameter berasal dari hasil tuning Optuna.
