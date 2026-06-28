@@ -86,7 +86,7 @@ def run_experiment(config_path: str) -> dict:
 
         # ── Catat metadata versi ───────────────────────────────────
         git_commit = get_git_commit()
-        mlflow.set_tag('git_commit (versi kode dan data)',       git_commit)
+        mlflow.set_tag('git_commit - versi kode dan data',       git_commit)
         mlflow.log_artifact("data/raw/ABSA_dataset_final_CLEAN.csv.dvc", artifact_path="dataset")
         mlflow.set_tag('model_name',       config['representation']['model_name'])
         mlflow.set_tag('model_revision',   config['representation'].get('model_revision', 'main'))
