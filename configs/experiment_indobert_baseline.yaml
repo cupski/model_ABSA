@@ -3,13 +3,14 @@ experiment:
   description: >
     IndoBERT fine-tuning ABSA Kompas.id — baseline.
     Hyperparameter berasal dari hasil tuning Optuna.
+    Datanya augmented tambahan sebesar 119 kalimat dan hanya mencakup kalimat dengan jumlah kata lebih dari 3
 
 # ── POINTER DATASET ───────────────────────────────────────────────────────────
 # dvc_version harus diperbarui setiap kali dataset berubah.
 # Jalankan: dvc add ABSA_dataset_final_CLEAN.csv && dvc push
 # lalu perbarui dvc_version di bawah sesuai tag DVC yang digunakan.
 data:
-  path: "data/raw/ABSA_dataset_final_CLEAN.csv"
+  path: "data/raw/ABSA_gt3_augmented.csv"
   text_column: "Komentar"
   split:
     train_ratio: 0.70
