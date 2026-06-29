@@ -97,7 +97,7 @@ def evaluate_model(config: dict, trained: dict, data: dict) -> dict:
 
 def _evaluate_indobert(config: dict, trained: dict, data: dict) -> dict:
     from torch.utils.data import DataLoader
-    from train import ABSADataset, ABSACollator
+    from model.absa_model import ABSADataset, ABSACollator
 
     rep_cfg = config['representation']
     params  = config['model']['params']
