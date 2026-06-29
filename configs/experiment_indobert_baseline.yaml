@@ -9,9 +9,6 @@ experiment:
     Augmentasi Datanya  sebesar 58 kalimat dan hanya mencakup kalimat dengan jumlah kata lebih dari 3
 
 # ── POINTER DATASET ───────────────────────────────────────────────────────────
-# dvc_version harus diperbarui setiap kali dataset berubah.
-# Jalankan: dvc add ABSA_dataset_final_CLEAN.csv && dvc push
-# lalu perbarui dvc_version di bawah sesuai tag DVC yang digunakan.
 data:
   path: "data/raw/dataset_raw_gt3_CQ_augmented.csv"
   text_column: "Komentar"
@@ -21,8 +18,6 @@ data:
     random_state: 42
 
 # ── KONFIGURASI PRAPEMROSESAN ─────────────────────────────────────────────────
-# Setiap flag dapat diaktifkan (true) atau dinonaktifkan (false)
-# tanpa mengubah kode prapemrosesan.
 preprocessing:
   remove_emoji: true
   lowercase: true
