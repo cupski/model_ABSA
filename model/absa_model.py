@@ -1,4 +1,4 @@
-import os, json, pickle, re
+import os, json, pickle, re, random
 import numpy as np
 import pandas as pd
 import torch
@@ -11,6 +11,23 @@ from transformers import (
 )
 from torch.optim import AdamW
 from sklearn.metrics import f1_score, classification_report
+
+
+#  SEED 
+def set_seed(seed: int) -> None:
+    """Seed semua sumber randomness untuk reprodusibilitas eksperimen.
+
+    Mencakup: Python random, NumPy, PyTorch CPU & CUDA, cuDNN determinism,
+    dan PYTHONHASHSEED. Panggil sebelum inisialisasi model dan DataLoader.
+    """
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark     = False
+
 
 # ── KONFIGURASI ───────────────────────────────────────────────────────────────
 CONFIG = {

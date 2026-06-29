@@ -7,7 +7,7 @@ from torch.optim import AdamW
 from transformers import AutoTokenizer, get_linear_schedule_with_warmup
 import mlflow
 
-from model.absa_model import ABSADataset, ABSACollator, ABSAModel, compute_loss
+from model.absa_model import ABSADataset, ABSACollator, ABSAModel, compute_loss, set_seed
 from pipeline.evaluate_model import _eval_loop
 from preprocessing.preprocessing_functions import FINAL_ASPECTS, NUM_CLASSES
 
@@ -58,6 +58,7 @@ def _train_indobert(config: dict, data: dict) -> dict:
     params    = model_cfg['params']
     save_dir  = model_cfg['save_dir']
 
+    seed   = config['experiment'].get('seed', 42)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"  Device: {device}")
     os.makedirs(save_dir, exist_ok=True)
@@ -79,9 +80,16 @@ def _train_indobert(config: dict, data: dict) -> dict:
     train_ds  = ABSADataset(df_train, tokenizer, rep_cfg['max_length'], FINAL_ASPECTS)
     val_ds    = ABSADataset(df_val,   tokenizer, rep_cfg['max_length'], FINAL_ASPECTS)
 
+    # Re-seed tepat sebelum inisialisasi model agar bobot classifier head deterministik,
+    # dan sebelum DataLoader agar urutan shuffle tiap epoch dapat direproduksi.
+    set_seed(seed)
+    shuffle_gen = torch.Generator()
+    shuffle_gen.manual_seed(seed)
+
     # num_workers=0 diperlukan di Windows untuk menghindari masalah multiprocessing
     train_loader      = DataLoader(train_ds, batch_size=params['batch_size'],
-                                   shuffle=True,  num_workers=0, collate_fn=collator)
+                                   shuffle=True,  num_workers=0, collate_fn=collator,
+                                   generator=shuffle_gen)
     train_eval_loader = DataLoader(train_ds, batch_size=params['batch_size'],
                                    shuffle=False, num_workers=0, collate_fn=collator)
     val_loader        = DataLoader(val_ds,   batch_size=params['batch_size'],

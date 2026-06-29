@@ -7,6 +7,7 @@ import yaml
 import mlflow
 import mlflow.pytorch
 
+from model.absa_model        import set_seed
 from pipeline.validate_data  import validate_data
 from pipeline.prepare_data   import prepare_data
 from pipeline.train_model    import train_model
@@ -126,7 +127,10 @@ def run_experiment(config_path: str) -> dict:
     dict — metrik evaluasi test set
     """
     config = load_config(config_path)
-    
+
+    seed = config['experiment'].get('seed', 42)
+    set_seed(seed)
+
     os.environ["MLFLOW_ENABLE_SYSTEM_METRICS_LOGGING"] = "true"
     tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", config["mlflow"]["tracking_uri"])
     mlflow.set_tracking_uri(tracking_uri)
@@ -149,6 +153,7 @@ def run_experiment(config_path: str) -> dict:
         mlflow.set_tag('model_name',     config['representation']['model_name'])
         mlflow.set_tag('model_revision', config['representation'].get('model_revision', 'main'))
         mlflow.set_tag('mlflow.note.content', config['experiment'].get('description', ''))
+        mlflow.log_param('experiment.seed', seed)
 
         mlflow.log_artifact("requirements.txt")
 
