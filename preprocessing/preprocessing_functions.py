@@ -39,6 +39,9 @@ SLANG_DICT = {
     'app': 'aplikasi', 'apps': 'aplikasi', 'apk': 'aplikasi',
     'ok' : 'oke'  , 'subs': 'berlangganan', 'langganan': 'berlangganan',
     'epaper': 'e-paper', 'e paper': 'e-paper',
+    'independent' : 'independen',  
+    'credible'    : 'kredibel',    
+    'content'     : 'konten',     
 }
 
 # Kata-kata yang SENGAJA tidak dimasukkan ke STOPWORDS karena bermakna sentimen:

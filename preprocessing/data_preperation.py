@@ -1,10 +1,13 @@
 import os
+import sys
 import json
 import argparse
 import pandas as pd
 
-from load_data import load_data
-from preprocessing_functions import (
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from preprocessing.load_data import load_data
+from preprocessing.preprocessing_functions import (
     clean_text,
     remove_emoji,
     lowercase,
@@ -219,4 +222,4 @@ if __name__ == '__main__':
     # if not args.test_only:
     #     run_pipeline(args.data_path, args.output_dir)
     
-    run_pipeline("data/raw/ABSA_dataset_final_CLEAN.csv", ".")
+    run_pipeline("data/raw/ABSA_gt3_augmented.csv", ".")

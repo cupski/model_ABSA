@@ -1,7 +1,7 @@
 import pandas as pd
 
-from load_data import load_data
-from preprocessing_functions import FINAL_ASPECTS
+from preprocessing.load_data import load_data
+from preprocessing.preprocessing_functions import FINAL_ASPECTS
 
 VALID_LABEL_VALUES = {-1, 0, 1}
 

@@ -78,7 +78,7 @@ def run_experiment(config_path: str) -> dict:
 
     mlflow.set_experiment(config['experiment']['name'])
 
-    with mlflow.start_run(run_name=config['experiment']['name']) as run:
+    with mlflow.start_run(run_name=config['experiment'].get('run_name', config['experiment']['name'])) as run:
         run_id = run.info.run_id
 
         print(f"\n{'='*60}")
@@ -93,7 +93,7 @@ def run_experiment(config_path: str) -> dict:
         mlflow.set_tag('git_commit',     git_commit)
         mlflow.set_tag('model_name',     config['representation']['model_name'])
         mlflow.set_tag('model_revision', config['representation'].get('model_revision', 'main'))
-        mlflow.set_tag('description',    config['experiment'].get('description', ''))
+        mlflow.set_tag('mlflow.note.content', config['experiment'].get('description', ''))
 
         mlflow.log_artifact("requirements.txt")
 

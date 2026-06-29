@@ -7,9 +7,9 @@ from torch.optim import AdamW
 from transformers import AutoTokenizer, get_linear_schedule_with_warmup
 import mlflow
 
-from train import ABSADataset, ABSACollator, ABSAModel, compute_loss
+from model.absa_model import ABSADataset, ABSACollator, ABSAModel, compute_loss
 from pipeline.evaluate_model import _eval_loop
-from preprocessing_functions import FINAL_ASPECTS, NUM_CLASSES
+from preprocessing.preprocessing_functions import FINAL_ASPECTS, NUM_CLASSES
 
 
 def _compute_val_loss(model, loader, class_weights, device) -> float:

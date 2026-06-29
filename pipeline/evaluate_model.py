@@ -4,7 +4,7 @@ import torch
 import matplotlib.pyplot as plt
 from sklearn.metrics import f1_score, classification_report, confusion_matrix
 
-from preprocessing_functions import FINAL_ASPECTS, NUM_CLASSES, LABEL_NAMES
+from preprocessing.preprocessing_functions import FINAL_ASPECTS, NUM_CLASSES, LABEL_NAMES
 
 NONE_IDX = {asp: NUM_CLASSES[asp] - 1 for asp in FINAL_ASPECTS}
 

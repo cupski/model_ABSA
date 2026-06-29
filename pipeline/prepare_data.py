@@ -1,7 +1,7 @@
 import pandas as pd
 
-from load_data import load_data
-from preprocessing_functions import (
+from preprocessing.load_data import load_data
+from preprocessing.preprocessing_functions import (
     remove_emoji, lowercase, remove_url_mention,
     compress_repeated_chars, remove_special_chars,
     normalize_whitespace, normalize_slang, remove_stopwords,
