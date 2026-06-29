@@ -48,6 +48,61 @@ def flatten_config(cfg: dict, prefix: str = '') -> dict:
     return out
 
 
+def _is_colab() -> bool:
+    try:
+        import google.colab  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _save_model_checkpoint(ckpt_path: str, config: dict, run_id: str) -> None:
+    """
+    Simpan checkpoint model (.pt) ke lokasi persisten sesuai environment:
+      - Colab  → Google Drive (transfer lokal dalam infrastruktur Google, cepat)
+      - Lokal  → lewati (file sudah ada di save_dir)
+
+    URI tujuan dicatat ke MLflow sebagai tag 'model_checkpoint_uri'.
+    """
+    if not os.path.isfile(ckpt_path):
+        print("  [!] best_model.pt tidak ditemukan, simpan checkpoint dilewati.")
+        return
+
+    mlflow_cfg   = config.get('mlflow', {})
+    run_name     = config['experiment'].get('run_name', run_id[:8])
+    registry_name = mlflow_cfg.get('registry_name', 'absa_indobert')
+
+    if _is_colab():
+        # ── Simpan ke Google Drive ─────────────────────────────────────────
+        gdrive_base = mlflow_cfg.get('gdrive_dir', 'absa_models')
+        drive_root  = '/content/drive/MyDrive'
+
+        if not os.path.isdir(drive_root):
+            print("  Mounting Google Drive...")
+            from google.colab import drive
+            drive.mount('/content/drive')
+
+        dest_dir  = os.path.join(drive_root, gdrive_base, registry_name, run_name)
+        os.makedirs(dest_dir, exist_ok=True)
+        dest_path = os.path.join(dest_dir, 'best_model.pt')
+
+        print(f"  Menyalin model ke Google Drive → {dest_path} ...")
+        import shutil
+        shutil.copy2(ckpt_path, dest_path)
+
+        gdrive_uri = f"gdrive://MyDrive/{gdrive_base}/{registry_name}/{run_name}/best_model.pt"
+        mlflow.set_tag('model_checkpoint_uri',    gdrive_uri)
+        mlflow.set_tag('model_checkpoint_run_id', run_id)
+        print(f"  Tersimpan di Google Drive: {gdrive_uri}")
+
+    else:
+        # ── Training lokal: file sudah ada di save_dir, catat path-nya ──
+        abs_path = os.path.abspath(ckpt_path)
+        mlflow.set_tag('model_checkpoint_uri',    f"local://{abs_path}")
+        mlflow.set_tag('model_checkpoint_run_id', run_id)
+        print(f"  Checkpoint tersimpan lokal: {abs_path}")
+
+
 # ── ORKESTRASI PIPELINE ────────────────────────────────────────────────────────
 
 def run_experiment(config_path: str) -> dict:
@@ -144,9 +199,7 @@ def run_experiment(config_path: str) -> dict:
         metrics = evaluate_model(config, trained, data)
         mlflow.log_metrics(metrics)
 
-        # ── Simpan artefak ke MLflow ────────────────────────────────
-        # Hanya file kecil dari save_dir (skip checkpoint model yang besar)
-        # Checkpoint disimpan terpisah via DVC setelah training selesai
+        # ── Simpan artefak kecil ke MLflow ────────────────────────────
         _LARGE_EXTS = {'.bin', '.safetensors', '.pt', '.pth'}
         if os.path.isdir(save_dir):
             for fname in os.listdir(save_dir):
@@ -154,8 +207,11 @@ def run_experiment(config_path: str) -> dict:
                 if os.path.isfile(fpath) and os.path.splitext(fname)[1].lower() not in _LARGE_EXTS:
                     mlflow.log_artifact(fpath, artifact_path='model_artifacts')
 
-        # File konfigurasi yang digunakan eksperimen ini
         mlflow.log_artifact(config_path, artifact_path='config')
+
+        # ── Simpan checkpoint model (.pt) ─────────────────────────────
+        ckpt_path = os.path.join(save_dir, 'best_model.pt')
+        _save_model_checkpoint(ckpt_path, config, run_id)
 
         print(f"\n{'='*60}")
         print("EKSPERIMEN SELESAI")
@@ -163,11 +219,6 @@ def run_experiment(config_path: str) -> dict:
         print(f"  Test Mean Sentiment F1 : {metrics.get('test_mean_sentiment_f1', 0):.4f}  <- metrik utama")
         print(f"  Test Mean Detection F1 : {metrics.get('test_mean_detect_f1', 0):.4f}")
         print(f"  MLflow Run ID          : {run_id}")
-        print(f"\n  [!] Checkpoint model belum di-push ke MinIO.")
-        print(f"      Setelah git pull di laptop, jalankan:")
-        print(f"        dvc add {save_dir}/")
-        print(f"        dvc push")
-        print(f"        git add {save_dir}.dvc && git commit && git push")
         print(f"{'='*60}\n")
 
     return metrics

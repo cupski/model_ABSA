@@ -58,3 +58,5 @@ model:
 
 mlflow:
   tracking_uri: http://localhost:5000
+  registry_name: "absa_indobert"
+  gdrive_dir: "absa_models"
