@@ -8,6 +8,12 @@ schedule:
 
 # ── EKSTRAKSI DATA ────────────────────────────────────────────────────────────
 data_extraction:
+  # Komponen monitoring (lihat Subbab III.1.4.1) belum dibangun. Selama
+  # False, step extract_data dilewati tanpa memanggil monitoring API —
+  # pipeline lanjut memakai dataset yang sudah ada di model_config.data.path
+  # apa adanya. Set True setelah endpoint monitoring_api_url benar-benar
+  # tersedia dan dapat dipanggil.
+  enabled: false
   # File pencatat timestamp ekstraksi terakhir (dikelola otomatis oleh pipeline)
   state_file: "workflow/.state/last_extraction_timestamp"
   # Base URL komponen monitoring yang mengekspos data teranotasi

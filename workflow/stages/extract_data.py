@@ -232,6 +232,18 @@ def run_extract_data(workflow_config: dict, model_config: dict) -> dict:
     suf_cfg   = workflow_config['data_sufficiency']
     notif_cfg = workflow_config['notification']
 
+    existing_path = model_config['data']['path']
+
+    if not ext_cfg.get('enabled', False):
+        print("  [DILEWATI] data_extraction.enabled=false — komponen monitoring "
+              "belum tersedia. Pipeline lanjut dengan dataset yang ada.")
+        return {
+            'dataset_path'   : existing_path,
+            'n_new_samples'  : 0,
+            'data_sufficient': False,
+            'extraction_ts'  : None,
+        }
+
     state_file = ext_cfg.get('state_file', _DEFAULT_STATE_FILE)
     since_ts   = load_last_timestamp(state_file)
     print(f"  Mengambil data produksi sejak: {since_ts}")
@@ -242,8 +254,6 @@ def run_extract_data(workflow_config: dict, model_config: dict) -> dict:
         timeout         = ext_cfg.get('monitoring_api_timeout_seconds', 30),
     )
     print(f"  Data baru diterima: {len(df_new)} sampel")
-
-    existing_path = model_config['data']['path']
 
     sufficiency = check_data_sufficiency(
         df_new               = df_new,

@@ -138,8 +138,8 @@ class ABSARetrainingFlow(FlowSpec):
         self.extraction_result = run_extract_data(self.workflow_config, self.model_config)
 
         # Perbarui path dataset di model config jika ada versi baru
-        # self.model_config['data']['path'] = self.extraction_result['dataset_path']
-        self.model_config['data']['path'] = self.config_path["data"]["path"]
+        self.model_config['data']['path'] = self.extraction_result['dataset_path']
+        # self.model_config['data']['path'] = self.config_path["data"]["path"]
 
         self.next(self.validate_data)
 
