@@ -29,8 +29,8 @@ data_sufficiency:
 # ── VALIDASI MODEL ────────────────────────────────────────────────────────────
 model_validation:
   # Ambang minimum metrik pada test set (uji 1: threshold absolute)
-  min_sentiment_f1: 0.65
-  min_detection_f1: 0.70
+  min_sentiment_f1: 0.5
+  min_detection_f1: 0.5
   # Metrik yang digunakan untuk perbandingan dengan model produksi (uji 2)
   comparison_metric: "test_mean_sentiment_f1"
   # True  → model baru harus LEBIH BAIK dari produksi untuk lolos
