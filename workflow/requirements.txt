@@ -1,0 +1,12 @@
+# Dependensi tambahan untuk Automated ML Workflow Pipeline
+# Dependensi training (torch, transformers, dll) tetap di requirements.txt root
+
+# Orkestrasi pipeline
+metaflow>=2.12.0
+
+# HTTP client untuk ekstraksi data dari monitoring API
+requests>=2.31.0
+
+# Entry point trigger eksternal (HTTP server)
+fastapi>=0.100.0
+uvicorn>=0.23.0

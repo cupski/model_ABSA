@@ -1,0 +1,54 @@
+# Konfigurasi Automated ML Workflow Pipeline
+# (Terpisah dari configs/experiment_*.yaml yang merupakan konfigurasi model/eksperimen)
+
+# ── PENJADWALAN ───────────────────────────────────────────────────────────────
+schedule:
+  interval: "monthly"
+  cron: "0 0 1 * *"          # Setiap tanggal 1 pukul 00:00 UTC
+
+# ── EKSTRAKSI DATA ────────────────────────────────────────────────────────────
+data_extraction:
+  # File pencatat timestamp ekstraksi terakhir (dikelola otomatis oleh pipeline)
+  state_file: "workflow/.state/last_extraction_timestamp"
+  # Base URL komponen monitoring yang mengekspos data teranotasi
+  monitoring_api_url: "http://localhost:8001"
+  monitoring_api_timeout_seconds: 30
+
+# ── KRITERIA KECUKUPAN DATA ───────────────────────────────────────────────────
+data_sufficiency:
+  # Data baru dianggap cukup jika memenuhi SALAH SATU kriteria berikut:
+  min_new_samples: 100           # Minimal 100 sampel baru, ATAU
+  min_ratio_of_existing: 0.05   # Minimal 5% dari ukuran dataset sebelumnya
+
+# ── VALIDASI MODEL ────────────────────────────────────────────────────────────
+model_validation:
+  # Ambang minimum metrik pada test set (uji 1: threshold absolute)
+  min_sentiment_f1: 0.65
+  min_detection_f1: 0.70
+  # Metrik yang digunakan untuk perbandingan dengan model produksi (uji 2)
+  comparison_metric: "test_mean_sentiment_f1"
+  # True  → model baru harus LEBIH BAIK dari produksi untuk lolos
+  # False → model baru cukup memenuhi threshold minimum
+  require_improvement: False
+  # Uji 2 (perbandingan dengan produksi) hanya relevan jika registered model
+  # SUDAH ada di MLflow Model Registry dengan minimal satu versi berstage
+  # production_stage. Untuk kondisi saat ini — belum ada eksperimen yang
+  # didaftarkan ke registry sama sekali — set True agar uji 2 dilewati
+  # otomatis (mode bootstrap) selama belum ada model produksi.
+  # Set False jika ingin pipeline GAGAL ketika belum ada model produksi,
+  # misalnya untuk memaksa registrasi manual model pertama sebelum
+  # automated pipeline diizinkan berjalan penuh.
+  skip_comparison_if_no_production: true
+
+# ── NOTIFIKASI ────────────────────────────────────────────────────────────────
+notification:
+  # URL webhook kompatibel Slack/Teams/dsb (kosongkan jika belum dikonfigurasi)
+  annotator_webhook_url: ""
+  enable_notifications: false
+
+# ── MLFLOW MODEL REGISTRY ─────────────────────────────────────────────────────
+mlflow:
+  tracking_uri: "http://localhost:5000"
+  registry_name: "absa_indobert"
+  register_stage: "Staging"      # Stage saat model baru didaftarkan
+  production_stage: "Production" # Stage model yang sedang berjalan di produksi

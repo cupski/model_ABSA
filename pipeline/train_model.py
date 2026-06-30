@@ -1,5 +1,5 @@
 import os
-import pickle
+import yaml
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -8,7 +8,7 @@ from transformers import AutoTokenizer, get_linear_schedule_with_warmup
 import mlflow
 
 from model.absa_model import ABSADataset, ABSACollator, ABSAModel, compute_loss, set_seed
-from pipeline.evaluate_model import _eval_loop
+from pipeline.evaluate_model import _eval_loop, _asp_key
 from preprocessing.preprocessing_functions import FINAL_ASPECTS, NUM_CLASSES
 
 
@@ -40,11 +40,16 @@ def train_model(config: dict, data: dict) -> dict:
     dict dengan kunci:
       model           : model terbaik (best checkpoint sudah dimuat kembali)
       tokenizer       : tokenizer yang digunakan
-      history         : riwayat metrik per epoch
       best_val_f1     : Sentiment F1 terbaik pada validation set
       best_val_det_f1 : Detection F1 pada epoch terbaik
       save_dir        : direktori penyimpanan checkpoint
       device          : torch.device yang digunakan
+
+    Catatan
+    -------
+    Seluruh riwayat metrik per epoch (termasuk breakdown per aspek) di-log
+    langsung ke MLflow (mlflow.log_metric, step=epoch+1) sehingga dapat
+    dilihat sebagai chart di MLflow UI tanpa artefak file terpisah.
     """
     model_type = config['model']['type']
     if model_type == 'indobert_multitask':
@@ -109,16 +114,6 @@ def _train_indobert(config: dict, data: dict) -> dict:
     scheduler    = get_linear_schedule_with_warmup(optimizer, warmup_steps, total_steps)
 
     best_sent, best_det, patience_cnt = 0.0, 0.0, 0
-    history = {
-        'train_loss'              : [],
-        'val_loss'                : [],
-        'train_avg_detection_f1'  : [],
-        'val_avg_detection_f1'    : [],
-        'train_avg_sentiment_f1'  : [],
-        'val_avg_sentiment_f1'    : [],
-        'val_sentiment_f1_per_asp': [],
-        'val_detect_f1_per_asp'   : [],
-    }
 
     print(f"\n  {'='*56}")
     print(f"  TRAINING IndoBERT — {len(df_train)} train | {len(df_val)} val")
@@ -157,15 +152,6 @@ def _train_indobert(config: dict, data: dict) -> dict:
         _, _, avg_tr_det, avg_tr_sent, _, _ = _eval_loop(model, train_eval_loader, device)
         det_f1, sent_f1, avg_det, avg_sent, _, _ = _eval_loop(model, val_loader, device)
 
-        history['train_loss'].append(avg_train_loss)
-        history['val_loss'].append(avg_val_loss)
-        history['train_avg_detection_f1'].append(avg_tr_det)
-        history['val_avg_detection_f1'].append(avg_det)
-        history['train_avg_sentiment_f1'].append(avg_tr_sent)
-        history['val_avg_sentiment_f1'].append(avg_sent)
-        history['val_sentiment_f1_per_asp'].append(dict(sent_f1))
-        history['val_detect_f1_per_asp'].append(dict(det_f1))
-
         # ── Log metrik per epoch ke MLflow ────────────────────────────
         mlflow.log_metric('train_loss',             avg_train_loss, step=epoch + 1)
         mlflow.log_metric('val_loss',               avg_val_loss,   step=epoch + 1)
@@ -173,6 +159,13 @@ def _train_indobert(config: dict, data: dict) -> dict:
         mlflow.log_metric('val_avg_detection_f1',   avg_det,        step=epoch + 1)
         mlflow.log_metric('train_avg_sentiment_f1', avg_tr_sent,    step=epoch + 1)
         mlflow.log_metric('val_avg_sentiment_f1',   avg_sent,       step=epoch + 1)
+
+        # Breakdown per aspek (val) — satu-satunya informasi yang sebelumnya
+        # hanya tersimpan di history.pkl, kini langsung queryable di MLflow.
+        for asp in FINAL_ASPECTS:
+            asp_key = _asp_key(asp)
+            mlflow.log_metric(f'val_sentiment_f1_{asp_key}', sent_f1[asp], step=epoch + 1)
+            mlflow.log_metric(f'val_detect_f1_{asp_key}',    det_f1[asp],  step=epoch + 1)
 
         print(f"  Epoch {epoch+1}/{params['num_epochs']} | "
               f"Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f} | "
@@ -196,17 +189,22 @@ def _train_indobert(config: dict, data: dict) -> dict:
                 print(f"    Early stopping di epoch {epoch+1}")
                 break
 
-    pickle.dump(history, open(os.path.join(save_dir, 'history.pkl'), 'wb'))
-
     ckpt = torch.load(os.path.join(save_dir, 'best_model.pt'), map_location=device)
     model.load_state_dict(ckpt['model_state'])
     print(f"\n  Best model dimuat (dari epoch {ckpt['epoch']}, "
           f"Val Sentiment F1: {best_sent:.4f})")
 
+    # Simpan tokenizer dan salinan config yang mudah dibaca bersama checkpoint
+    # agar save_dir menjadi bundle mandiri (self-contained) untuk deployment —
+    # tidak perlu akses HF Hub ulang dan tidak bergantung pada config yang
+    # tersembunyi di dalam pickle best_model.pt.
+    tokenizer.save_pretrained(save_dir)
+    with open(os.path.join(save_dir, 'config.yaml'), 'w', encoding='utf-8') as f:
+        yaml.safe_dump(config, f, allow_unicode=True, sort_keys=False)
+
     return {
         'model'          : model,
         'tokenizer'      : tokenizer,
-        'history'        : history,
         'best_val_f1'    : best_sent,
         'best_val_det_f1': best_det,
         'save_dir'       : save_dir,
