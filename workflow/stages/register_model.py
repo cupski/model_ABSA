@@ -103,6 +103,20 @@ def run_register_model(
     with open(metrics_path, 'w', encoding='utf-8') as f:
         json.dump(metrics, f, indent=2, ensure_ascii=False)
 
+    # MLflow >=3 mensyaratkan file "MLmodel" (atau entitas LoggedModel) di
+    # artifact path sebelum mlflow.register_model() mau memakai runs:/ URI
+    # sebagai sumber versi model. Karena bundle ini bukan hasil
+    # mlflow.pytorch.log_model() (lihat alasan di docstring modul), tidak
+    # ada flavor loader — file ini hanya penanda kehadiran agar registry
+    # menunjuk langsung ke folder artifact bundle, bukan LoggedModel baru.
+    mlmodel_path = os.path.join(save_dir, 'MLmodel')
+    with open(mlmodel_path, 'w', encoding='utf-8') as f:
+        f.write(
+            "artifact_path: model\n"
+            "flavors: {}\n"
+            f"run_id: {run_id}\n"
+        )
+
     print(f"  Mengunggah bundle artifact dari {save_dir} ke MLflow run {run_id[:8]}...")
     with mlflow.start_run(run_id=run_id):
         mlflow.log_artifacts(save_dir, artifact_path='model')
