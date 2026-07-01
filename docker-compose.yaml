@@ -40,17 +40,22 @@ services:
       AWS_SECRET_ACCESS_KEY: ${B2_APPLICATION_KEY}
       MLFLOW_S3_ENDPOINT_URL: ${B2_ENDPOINT_URL}
 
-    # --serve-artifacts sengaja TIDAK diaktifkan: tanpa flag ini, MLflow
-    # server hanya mencatat metadata (path artifact, metric) lewat tunnel,
-    # sedangkan client (mis. Colab) upload artifact besar LANGSUNG ke B2
-    # via boto3 menggunakan kredensial B2 di atas — tunnel tidak pernah
-    # dilewati file model yang berukuran ratusan MB.
+    # --serve-artifacts default-nya TRUE di MLflow — harus di-nonaktifkan
+    # eksplisit lewat --no-serve-artifacts, kalau tidak server tetap jadi
+    # proxy (artifact_location experiment baru akan berupa "mlflow-artifacts:/..."
+    # yang memaksa semua upload lewat tracking server / tunnel).
+    # --default-artifact-root (bukan --artifacts-destination, yang hanya
+    # berlaku saat proxy aktif) yang menentukan artifact_location "s3://..."
+    # untuk experiment baru, sehingga client (mis. Colab) upload artifact
+    # besar LANGSUNG ke B2 via boto3 — tunnel tidak dilewati file model
+    # yang berukuran ratusan MB.
     command: >
       mlflow server
       --host 0.0.0.0
       --port 5000
       --backend-store-uri postgresql://mlflow:mlflow123@postgres:5432/mlflow
-      --artifacts-destination s3://${B2_BUCKET_NAME}
+      --default-artifact-root s3://${B2_BUCKET_NAME}
+      --no-serve-artifacts
       --allowed-hosts "*"
 
 volumes:
