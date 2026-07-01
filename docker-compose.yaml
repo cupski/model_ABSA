@@ -20,26 +20,6 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
 
-  minio:
-    image: minio/minio:latest
-    container_name: minio
-
-    restart: unless-stopped
-
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-
-    environment:
-      MINIO_ROOT_USER: admin
-      MINIO_ROOT_PASSWORD: password123
-
-    command: server /data --console-address ":9001"
-
-    volumes:
-      - minio_data:/data
-
-
   mlflow:
     build:
       context: .
@@ -51,27 +31,28 @@ services:
 
     depends_on:
       - postgres
-      - minio
 
     ports:
       - "5000:5000"
 
     environment:
-      AWS_ACCESS_KEY_ID: admin
-      AWS_SECRET_ACCESS_KEY: password123
-      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${B2_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${B2_APPLICATION_KEY}
+      MLFLOW_S3_ENDPOINT_URL: ${B2_ENDPOINT_URL}
 
+    # --serve-artifacts sengaja TIDAK diaktifkan: tanpa flag ini, MLflow
+    # server hanya mencatat metadata (path artifact, metric) lewat tunnel,
+    # sedangkan client (mis. Colab) upload artifact besar LANGSUNG ke B2
+    # via boto3 menggunakan kredensial B2 di atas — tunnel tidak pernah
+    # dilewati file model yang berukuran ratusan MB.
     command: >
       mlflow server
       --host 0.0.0.0
       --port 5000
       --backend-store-uri postgresql://mlflow:mlflow123@postgres:5432/mlflow
-      --artifacts-destination s3://mlflow-artifacts
-      --serve-artifacts
+      --artifacts-destination s3://${B2_BUCKET_NAME}
       --allowed-hosts "*"
 
 volumes:
 
   postgres_data:
-
-  minio_data:
