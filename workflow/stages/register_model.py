@@ -50,10 +50,10 @@ from mlflow import MlflowClient
 
 from model.absa_pyfunc import ABSAPyfuncModel
 
+
 _PYFUNC_CODE_PATHS = [
-    os.path.join(_REPO_ROOT, 'model', 'absa_pyfunc.py'),
-    os.path.join(_REPO_ROOT, 'model', 'absa_model.py'),
-    os.path.join(_REPO_ROOT, 'preprocessing', 'preprocessing_functions.py'),
+    os.path.join(_REPO_ROOT, 'model'),
+    os.path.join(_REPO_ROOT, 'preprocessing'),
 ]
 
 
