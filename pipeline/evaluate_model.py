@@ -78,6 +78,44 @@ def _eval_loop(model, loader, device):
     return detect_f1, sentiment_f1, avg_detect, avg_sentiment, all_preds, all_labels
 
 
+def compute_test_metrics(model, tokenizer, config: dict, data: dict) -> dict:
+    """
+    Hitung metrik test set (flat, format sama seperti evaluate_model()) tanpa
+    menulis classification_report.txt / confusion_matrix.png ke disk.
+
+    Dipakai untuk re-evaluasi model baseline yang diunduh dari MLflow Model
+    Registry pada test set yang sama dengan model baru (lihat Uji 3 di
+    workflow/stages/validate_model.py) — perbandingan lewat metrik tersimpan
+    saja tidak valid begitu dataset training berubah antar siklus retraining,
+    karena test split ikut berbeda.
+    """
+    from torch.utils.data import DataLoader
+    from model.absa_model import ABSADataset, ABSACollator
+
+    rep_cfg = config['representation']
+    params  = config['model']['params']
+    device  = next(model.parameters()).device
+
+    test_ds     = ABSADataset(data['df_test'], tokenizer, rep_cfg['max_length'], FINAL_ASPECTS)
+    collator    = ABSACollator(tokenizer)
+    test_loader = DataLoader(
+        test_ds, batch_size=params['batch_size'],
+        shuffle=False, num_workers=0, collate_fn=collator,
+    )
+
+    det_f1, sent_f1, avg_det, avg_sent, _, _ = _eval_loop(model, test_loader, device)
+
+    metrics = {
+        'test_mean_detect_f1'   : avg_det,
+        'test_mean_sentiment_f1': avg_sent,
+    }
+    for asp in FINAL_ASPECTS:
+        k = _asp_key(asp)
+        metrics[f'test_{k}_detect_f1']    = det_f1[asp]
+        metrics[f'test_{k}_sentiment_f1'] = sent_f1[asp]
+    return metrics
+
+
 def evaluate_model(config: dict, trained: dict, data: dict) -> dict:
     """
     Evaluasi model pada test set dan kembalikan metrik dalam format flat

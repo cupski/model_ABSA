@@ -227,7 +227,7 @@ class ABSARetrainingFlow(FlowSpec):
 
         print(f"\n[6/7] Validasi model...")
         self.model_validation = run_validate_model(
-            self.metrics, self.workflow_config, self.model_config
+            self.metrics, self.data, self.workflow_config, self.model_config
         )
 
         self.next(self.register_model)

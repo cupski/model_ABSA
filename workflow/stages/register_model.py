@@ -7,8 +7,8 @@ Mendaftarkan model yang sudah divalidasi ke MLflow Model Registry sebagai
 versi baru dengan stage "Staging". Model hanya didaftarkan jika tahap
 validate_model menyatakan bahwa model lolos kedua pengujian.
 
-Pendekatan registrasi: artifact bundle, bukan mlflow.pytorch.log_model()
--------------------------------------------------------------------------
+Pendekatan registrasi: custom pyfunc flavor, bukan mlflow.pytorch.log_model()
+-------------------------------------------------------------------------------
 save_dir (hasil pipeline/train_model.py) sudah menjadi bundle mandiri yang
 cukup untuk reproduksi/deployment tanpa dependensi eksternal:
   best_model.pt   — state_dict + config + metrik epoch terbaik
@@ -20,29 +20,41 @@ cukup untuk reproduksi/deployment tanpa dependensi eksternal:
   ke MLflow run via mlflow.log_metric — dapat dilihat sebagai chart di
   MLflow UI tanpa artefak file terpisah)
 
-Seluruh folder ini di-upload apa adanya via mlflow.log_artifacts() lalu
-didaftarkan ke registry dengan mlflow.register_model(). Pendekatan ini
-dipilih alih-alih mlflow.pytorch.log_model() karena:
+Bundle ini dibungkus wrapper model/absa_pyfunc.py (mlflow.pyfunc.PythonModel)
+lewat mlflow.pyfunc.log_model(), lalu didaftarkan ke registry dengan
+mlflow.register_model(). Pendekatan ini dipilih alih-alih mlflow.pytorch.log_model()
+langsung karena:
   - mlflow.pytorch.log_model() mem-pickle objek ABSAModel secara utuh,
     sehingga artifact tetap terikat erat pada path modul Python persis
     saat training (model.absa_model.ABSAModel) — rapuh terhadap refactor
     atau perpindahan environment.
-  - Logika rekonstruksi model (ABSAModel(...) + load_state_dict) tetap
-    eksplisit di kode evaluasi/deployment, bukan tersembunyi di balik
-    mekanisme serialisasi pickle MLflow.
-  - Registry hanya perlu menunjuk ke artifact yang dapat dipakai ulang —
-    tidak harus berupa flavor pyfunc/pytorch bawaan MLflow. Tahap ini
-    karenanya tidak perlu memuat model PyTorch ke memori sama sekali;
-    registrasi murni operasi penyalinan berkas + pencatatan metadata.
+  - Wrapper pyfunc hanya mem-pickle dirinya sendiri (kode tipis); bobot
+    model tetap file checkpoint biasa yang dimuat ulang eksplisit lewat
+    ABSAModel(...) + load_state_dict() di load_context() — logika
+    rekonstruksi tetap terlihat, tidak tersembunyi di balik pickle.
+  - Flavor pyfunc memberi satu entrypoint standar (mlflow.pyfunc.load_model())
+    yang bisa dipakai registry, `mlflow models serve`, maupun aplikasi
+    konsumen — tanpa perlu menulis file MLmodel secara manual.
 """
 
 import os
 import sys
 import json
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+
+_REPO_ROOT = os.path.join(os.path.dirname(__file__), '..', '..')
+sys.path.insert(0, _REPO_ROOT)
 
 import mlflow
+import mlflow.pyfunc
 from mlflow import MlflowClient
+
+from model.absa_pyfunc import ABSAPyfuncModel
+
+_PYFUNC_CODE_PATHS = [
+    os.path.join(_REPO_ROOT, 'model', 'absa_pyfunc.py'),
+    os.path.join(_REPO_ROOT, 'model', 'absa_model.py'),
+    os.path.join(_REPO_ROOT, 'preprocessing', 'preprocessing_functions.py'),
+]
 
 
 def run_register_model(
@@ -103,33 +115,31 @@ def run_register_model(
     with open(metrics_path, 'w', encoding='utf-8') as f:
         json.dump(metrics, f, indent=2, ensure_ascii=False)
 
-    # MLflow >=3 mensyaratkan file "MLmodel" (atau entitas LoggedModel) di
-    # artifact path sebelum mlflow.register_model() mau memakai runs:/ URI
-    # sebagai sumber versi model. Karena bundle ini bukan hasil
-    # mlflow.pytorch.log_model() (lihat alasan di docstring modul), tidak
-    # ada flavor loader — file ini hanya penanda kehadiran agar registry
-    # menunjuk langsung ke folder artifact bundle, bukan LoggedModel baru.
-    mlmodel_path = os.path.join(save_dir, 'MLmodel')
-    with open(mlmodel_path, 'w', encoding='utf-8') as f:
-        f.write(
-            "artifact_path: model\n"
-            "flavors: {}\n"
-            f"run_id: {run_id}\n"
-        )
-
-    print(f"  Mengunggah bundle artifact dari {save_dir} ke MLflow run {run_id[:8]}...")
+    print(f"  Mengunggah bundle model dari {save_dir} ke MLflow run {run_id[:8]} (pyfunc)...")
     with mlflow.start_run(run_id=run_id):
-        mlflow.log_artifacts(save_dir, artifact_path='model')
+        mlflow.pyfunc.log_model(
+            artifact_path    = 'model',
+            python_model     = ABSAPyfuncModel(),
+            artifacts        = {'checkpoint': save_dir},
+            code_paths       = _PYFUNC_CODE_PATHS,
+            pip_requirements = ['torch>=2.0.0', 'transformers==5.12.0'],
+        )
 
     model_uri = f"runs:/{run_id}/model"
     print(f"  Mendaftarkan {model_uri} ke registry '{registry_name}'...")
     model_version = mlflow.register_model(model_uri=model_uri, name=registry_name)
 
     client = MlflowClient()
+    # archive_existing_versions=True aman dipakai di sini karena Uji 3 di
+    # validate_model.py (_check_vs_staging_reeval) sudah memastikan model
+    # baru benar-benar lebih baik daripada versi yang sedang di register_stage
+    # sebelum sampai ke tahap ini — versi lama yang di-archive memang kalah
+    # performanya, bukan sekadar tergeser posisi.
     client.transition_model_version_stage(
-        name    = registry_name,
-        version = model_version.version,
-        stage   = register_stage,
+        name                    = registry_name,
+        version                 = model_version.version,
+        stage                   = register_stage,
+        archive_existing_versions = True,
     )
 
     # Tambahkan deskripsi versi dengan metrik utama

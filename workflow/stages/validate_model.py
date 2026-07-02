@@ -14,6 +14,9 @@ dapat diteruskan ke tahap registrasi:
   Uji 2 — Perbandingan dengan model produksi:
     Jika require_improvement=True, model baru harus lebih baik dari
     model yang sedang berjalan di produksi (berdasarkan comparison_metric).
+    Menggunakan metrik yang SUDAH TERSIMPAN dari run model produksi
+    (bukan re-evaluasi) — hanya valid apple-to-apple selama dataset/test
+    split tidak berubah antar siklus retraining.
 
     Mode Bootstrap (belum ada model produksi):
     Saat registry MLflow belum memiliki registered model ini sama sekali
@@ -25,15 +28,38 @@ dapat diteruskan ke tahap registrasi:
       True  → uji 2 dilewati otomatis dan dianggap lulus (bootstrap)
       False → uji 2 dianggap GAGAL — memaksa registrasi model produksi
               pertama secara manual sebelum pipeline dapat lolos penuh
+
+  Uji 3 — Perbandingan dengan model Staging saat ini (re-evaluasi):
+    Model yang SEDANG berada di register_stage (mis. "Staging") — yang akan
+    digantikan/di-archive kalau model baru didaftarkan — diunduh dari MLflow
+    Model Registry dan DIEVALUASI ULANG pada test set yang SAMA dengan model
+    baru (data['df_test'] hasil run saat ini). Ini beda dengan Uji 2: metrik
+    baseline tidak diambil dari nilai tersimpan, tapi dihitung ulang di data
+    yang identik, sehingga perbandingan tetap valid meskipun dataset test
+    set berubah antar siklus retraining (begitu data_extraction diaktifkan,
+    extract_data menambah data produksi baru tiap siklus — test split tidak
+    lagi identik antar run, metrik tersimpan dari run lama tidak bisa
+    langsung dibandingkan apple-to-apple).
+
+    Model baru HARUS lebih baik dari hasil re-evaluasi baseline agar lolos
+    Uji 3 — kalau tidak, model baru tidak didaftarkan sama sekali (registry
+    tidak berubah, versi Staging lama tetap seperti semula).
+
+    Mode Bootstrap: kalau belum ada versi apapun di register_stage, uji 3
+    otomatis lulus (belum ada baseline untuk dibandingkan).
 """
 
 import os
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
+import torch
 import mlflow
 from mlflow.exceptions import MlflowException
 from mlflow import MlflowClient
+
+from model.checkpoint_io import load_model_from_checkpoint
+from pipeline.evaluate_model import compute_test_metrics
 
 
 # ── Uji 1: Threshold Absolut ──────────────────────────────────────────────────
@@ -233,25 +259,116 @@ def _check_vs_production(
     }
 
 
+# ── Uji 3: Perbandingan dengan Model Staging (Re-evaluasi) ───────────────────
+
+def _check_vs_staging_reeval(
+    metrics: dict,
+    data: dict,
+    workflow_config: dict,
+    model_config: dict,
+) -> dict:
+    """
+    Unduh model yang SEDANG berada di register_stage dari MLflow Model
+    Registry, evaluasi ulang pada test set yang SAMA dengan model baru
+    (data['df_test']), lalu bandingkan. Lihat penjelasan lengkap di
+    docstring modul.
+
+    Mode Bootstrap: kalau belum ada versi apapun di register_stage
+    (registered model belum ada, atau ada tapi belum ada versi berstage
+    tsb), uji ini otomatis lulus — belum ada baseline untuk dibandingkan.
+    """
+    mlflow_wf  = workflow_config.get('mlflow', {})
+    mlflow_mdl = model_config.get('mlflow', {})
+
+    registry_name     = mlflow_wf.get('registry_name', mlflow_mdl.get('registry_name', 'absa_indobert'))
+    register_stage    = mlflow_wf.get('register_stage', 'Staging')
+    comparison_metric = workflow_config['model_validation']['comparison_metric']
+
+    client = MlflowClient()
+    try:
+        versions = client.get_latest_versions(registry_name, stages=[register_stage])
+    except MlflowException as exc:
+        if 'RESOURCE_DOES_NOT_EXIST' in str(exc.error_code):
+            versions = []
+        else:
+            return {
+                'passed'        : False,
+                'reasons'       : [f"Gagal mengakses MLflow Model Registry: {exc}"],
+                'bootstrap_mode': False,
+                'details'       : {},
+            }
+
+    if not versions:
+        return {
+            'passed'        : True,
+            'reasons'       : [],
+            'bootstrap_mode': True,
+            'details': {
+                'note': (
+                    f"Belum ada versi berstage '{register_stage}' pada "
+                    f"registered model '{registry_name}' — mode bootstrap."
+                ),
+            },
+        }
+
+    baseline_version = versions[0].version
+    print(f"    Mengunduh & mengevaluasi ulang '{registry_name}' v{baseline_version} "
+          f"(stage {register_stage}) pada test set saat ini...")
+
+    model_uri      = f"models:/{registry_name}/{register_stage}"
+    local_dir      = mlflow.artifacts.download_artifacts(artifact_uri=model_uri)
+    checkpoint_dir = os.path.join(local_dir, 'artifacts', 'checkpoint')
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    baseline_model, baseline_tokenizer, baseline_cfg = load_model_from_checkpoint(checkpoint_dir, device)
+    baseline_metrics = compute_test_metrics(baseline_model, baseline_tokenizer, baseline_cfg, data)
+
+    new_value      = metrics.get(comparison_metric, 0.0)
+    baseline_value = baseline_metrics.get(comparison_metric, 0.0)
+    passed = new_value > baseline_value
+
+    reasons = [] if passed else [
+        f"{comparison_metric} model baru ({new_value:.4f}) tidak lebih baik dari "
+        f"baseline '{register_stage}' v{baseline_version} ({baseline_value:.4f}) "
+        f"setelah re-evaluasi pada test set yang sama."
+    ]
+
+    return {
+        'passed'        : passed,
+        'reasons'       : reasons,
+        'bootstrap_mode': False,
+        'details': {
+            'baseline_version': baseline_version,
+            'metric'          : comparison_metric,
+            'new_value'       : new_value,
+            'baseline_value'  : baseline_value,
+            'delta'           : new_value - baseline_value,
+        },
+    }
+
+
 # ── Entry Point ───────────────────────────────────────────────────────────────
 
-def run_validate_model(metrics: dict, workflow_config: dict, model_config: dict) -> dict:
+def run_validate_model(metrics: dict, data: dict, workflow_config: dict, model_config: dict) -> dict:
     """
-    Jalankan validasi model dua tahap.
+    Jalankan validasi model tiga tahap.
 
     Parameters
     ----------
     metrics         : dict — output run_evaluate_model() (metrik test set)
+    data            : dict — output run_prepare_data() (dipakai Uji 3 untuk
+                      re-evaluasi baseline pada test set yang sama)
     workflow_config : dict — konfigurasi workflow dari pipeline_config.yaml
     model_config    : dict — konfigurasi model dari YAML eksperimen
 
     Returns
     -------
     dict:
-      passed              : bool — True jika kedua uji lulus
-      threshold_check     : dict — hasil uji 1
-      production_check    : dict — hasil uji 2
-      failure_reasons     : list[str] — daftar alasan kegagalan (kosong jika lulus)
+      passed               : bool — True jika ketiga uji lulus
+      threshold_check      : dict — hasil uji 1
+      production_check     : dict — hasil uji 2
+      staging_reeval_check : dict — hasil uji 3
+      failure_reasons      : list[str] — daftar alasan kegagalan (kosong jika lulus)
     """
     validation_cfg = workflow_config['model_validation']
 
@@ -277,8 +394,22 @@ def run_validate_model(metrics: dict, workflow_config: dict, model_config: dict)
     for reason in production_result['reasons']:
         print(f"    - {reason}")
 
-    all_failure_reasons = threshold_result['reasons'] + production_result['reasons']
-    overall_passed = threshold_result['passed'] and production_result['passed']
+    print("\n  [Uji 3] Membandingkan dengan model Staging saat ini (re-evaluasi)...")
+    staging_result = _check_vs_staging_reeval(metrics, data, workflow_config, model_config)
+    status3 = 'LULUS' if staging_result['passed'] else 'GAGAL'
+
+    if staging_result['bootstrap_mode']:
+        print(f"  [MODE BOOTSTRAP] {staging_result['details'].get('note', '')}")
+    print(f"  Uji 3: {status3}")
+    for reason in staging_result['reasons']:
+        print(f"    - {reason}")
+
+    all_failure_reasons = (
+        threshold_result['reasons'] + production_result['reasons'] + staging_result['reasons']
+    )
+    overall_passed = (
+        threshold_result['passed'] and production_result['passed'] and staging_result['passed']
+    )
 
     if overall_passed:
         print("\n  Model LOLOS validasi dan siap didaftarkan.")
@@ -286,8 +417,9 @@ def run_validate_model(metrics: dict, workflow_config: dict, model_config: dict)
         print(f"\n  Model TIDAK LOLOS validasi ({len(all_failure_reasons)} alasan).")
 
     return {
-        'passed'           : overall_passed,
-        'threshold_check'  : threshold_result,
-        'production_check' : production_result,
-        'failure_reasons'  : all_failure_reasons,
+        'passed'               : overall_passed,
+        'threshold_check'      : threshold_result,
+        'production_check'     : production_result,
+        'staging_reeval_check' : staging_result,
+        'failure_reasons'      : all_failure_reasons,
     }
