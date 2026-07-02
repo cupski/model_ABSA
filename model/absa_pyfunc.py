@@ -1,18 +1,3 @@
-"""
-Wrapper Pyfunc untuk ABSAModel
-================================
-Membungkus bundle artifact (best_model.pt + tokenizer/ + config.yaml) hasil
-pipeline/train_model.py menjadi flavor mlflow.pyfunc, sehingga model dapat
-dimuat lewat satu entrypoint standar `mlflow.pyfunc.load_model()` — baik oleh
-MLflow Model Registry, `mlflow models serve`, maupun aplikasi konsumen.
-
-Hanya wrapper tipis ini yang di-pickle MLflow saat log_model(); bobot model
-tetap tersimpan sebagai file checkpoint biasa dan dimuat ulang lewat
-load_state_dict() di load_context() — bukan lewat pickle penuh objek
-ABSAModel/encoder, sehingga tidak rapuh terhadap perpindahan path modul
-Python seperti yang coba dihindari register_model.py.
-"""
-
 import os
 
 import mlflow.pyfunc
@@ -77,10 +62,14 @@ class ABSAPyfuncModel(mlflow.pyfunc.PythonModel):
 
         results = []
         for i in range(len(texts)):
-            pred = {
-                asp: self.label_names[asp][torch.argmax(logits[asp][i]).item()]
-                for asp in self.aspects
-            }
-            results.append(pred)
+            per_aspect = {}
+            for asp in self.aspects:
+                probs    = torch.softmax(logits[asp][i], dim=-1).cpu().numpy()
+                pred_idx = int(probs.argmax())
+                per_aspect[asp] = {
+                    'label': self.label_names[asp][pred_idx],
+                    'score': round(float(probs[pred_idx]), 4),
+                }
+            results.append(per_aspect)
 
         return results
